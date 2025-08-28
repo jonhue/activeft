@@ -159,6 +159,7 @@ If you use the code in a publication, please cite our papers:
 
 from activeft.active_data_loader import ActiveDataLoader
 from activeft import acquisition_functions, data, embeddings, model
+
 try:
     from activeft import sift
 except ImportError:
