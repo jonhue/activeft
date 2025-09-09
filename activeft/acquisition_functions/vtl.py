@@ -66,10 +66,10 @@ class VTL(TargetedBaCE):
 
         posterior_variances = compute_posterior_variance(target_indices, data_indices)
         total_posterior_variances = torch.sum(posterior_variances, dim=1)
-        wandb_log(
-            {
-                "max_posterior_var": torch.max(posterior_variances),
-                "min_posterior_var": torch.min(posterior_variances),
-            }
-        )
+        # wandb_log(
+        #     {
+        #         "max_posterior_var": torch.max(posterior_variances),
+        #         "min_posterior_var": torch.min(posterior_variances),
+        #     }
+        # )
         return -total_posterior_variances

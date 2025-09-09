@@ -6,7 +6,7 @@ from activeft.model import Model
 Element = Tuple[int, float]
 """`(index, value)`"""
 
-DEFAULT_MINI_BATCH_SIZE = 1_000
+DEFAULT_MINI_BATCH_SIZE = 50_000
 DEFAULT_EMBEDDING_BATCH_SIZE = 100
 DEFAULT_NUM_WORKERS = 0
 DEFAULT_SUBSAMPLE = False

@@ -328,7 +328,9 @@ class SequentialAcquisitionFunction(AcquisitionFunction[M], Generic[M, State]):
             warnings.warn(
                 "The evaluation of the acquisition function may be slow since `batch_size` is large relative to `mini_batch_size`."
             )
-
+        # return self.select_from_minibatch(
+        #     batch_size, model, dataset.data, device
+        # )
         indexed_dataset = _IndexedDataset(dataset)
         selected_indices = None
         selected_values = None
@@ -341,7 +343,6 @@ class SequentialAcquisitionFunction(AcquisitionFunction[M], Generic[M, State]):
                 num_workers=self.num_workers,
                 shuffle=True,
             )
-
             selected_indices = []
             selected_values = []
             for data, idx in data_loader:
