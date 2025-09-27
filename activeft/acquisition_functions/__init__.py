@@ -278,7 +278,9 @@ class SequentialAcquisitionFunction(AcquisitionFunction[M], Generic[M, State]):
 
         selected_indices = []
         selected_values = []
-        for _ in range(batch_size):
+        # Select at most the size of the mini-batch to avoid duplicates
+        num_to_select = min(batch_size, data.shape[0])
+        for _ in range(num_to_select):
             values = self.compute(state)
             i = self.selector(values)
             selected_indices.append(i)
@@ -322,20 +324,29 @@ class SequentialAcquisitionFunction(AcquisitionFunction[M], Generic[M, State]):
             )
 
         assert (
-            batch_size < self.mini_batch_size
-        ), "Batch size must be smaller than `mini_batch_size`."
-        if batch_size > self.mini_batch_size / 2:
-            warnings.warn(
-                "The evaluation of the acquisition function may be slow since `batch_size` is large relative to `mini_batch_size`."
-            )
-        # return self.select_from_minibatch(
-        #     batch_size, model, dataset.data, device
-        # )
+            batch_size <= self.mini_batch_size / 2
+        ), "Batch size must be smaller than `mini_batch_size / 2` to guarantee convergence."
+
         indexed_dataset = _IndexedDataset(dataset)
-        selected_indices = None
+        selected_global_indices = None
         selected_values = None
+
+        # When repeatedly subsetting, convert base indices (from _IndexedDataset)
+        # to indices relative to the current (possibly nested) Subset.
+        def _base_to_local_index_map(ds: TorchDataset) -> dict[int, int]:
+            def _flatten_to_base_indices(current_ds: TorchDataset) -> list[int]:
+                if isinstance(current_ds, Subset):
+                    parent_flat = _flatten_to_base_indices(current_ds.dataset)
+                    current_indices = list(current_ds.indices)
+                    return [parent_flat[i] for i in current_indices]
+                else:
+                    return list(range(len(current_ds)))
+
+            flat_base_indices = _flatten_to_base_indices(ds)
+            return {base_idx: local_pos for local_pos, base_idx in enumerate(flat_base_indices)}
+
         while (
-            selected_indices is None or len(selected_indices) > batch_size
+            selected_global_indices is None or len(selected_global_indices) > batch_size
         ):  # gradually shrinks size of selected batch, until the correct size is reached
             data_loader = DataLoader(
                 indexed_dataset,
@@ -343,18 +354,27 @@ class SequentialAcquisitionFunction(AcquisitionFunction[M], Generic[M, State]):
                 num_workers=self.num_workers,
                 shuffle=True,
             )
-            selected_indices = []
+            selected_global_indices = []
             selected_values = []
             for data, idx in data_loader:
                 sub_idx, sub_val = self.select_from_minibatch(
                     batch_size, model, data, device
                 )
-                selected_indices.extend(idx[sub_idx].cpu().tolist())
+                global_indices = idx[sub_idx].cpu().tolist()
+                selected_global_indices.extend(global_indices)
                 selected_values.extend(sub_val.cpu().tolist())
                 if self.subsample:
                     break
-            indexed_dataset = Subset(indexed_dataset, selected_indices)
-        return torch.tensor(selected_indices), torch.tensor(selected_values)
+            # Convert base indices to indices relative to the current dataset
+            # so that nesting Subset works correctly across iterations.
+            if isinstance(indexed_dataset, Subset):
+                base_to_local = _base_to_local_index_map(indexed_dataset)
+                local_indices = [base_to_local[i] for i in selected_global_indices]
+            # If indexed_dataset is _IndexedDataset, indices are already local
+            else:
+                local_indices = selected_global_indices
+            indexed_dataset = Subset(indexed_dataset, local_indices)
+        return torch.tensor(selected_global_indices), torch.tensor(selected_values)
 
 
 class EmbeddingBased(ABC):
