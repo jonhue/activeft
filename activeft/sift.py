@@ -7,6 +7,7 @@ import faiss
 import torch
 import time
 import concurrent.futures
+import copy
 import numpy as np
 from activeft import ActiveDataLoader
 from activeft.data import Dataset as AbstractDataset
@@ -188,13 +189,15 @@ class Retriever:
                 queries[i] if not mean_pooling else mean_queries[i].reshape(1, -1)
             )
 
-            if isinstance(self.acquisition_function, Targeted):
-                self.acquisition_function.set_target(target)
+            # Copy per query, as the target (and e.g. the priority queue of LazyVTL) is per-query state
+            acquisition_function = copy.deepcopy(self.acquisition_function)
+            if isinstance(acquisition_function, Targeted):
+                acquisition_function.set_target(target)
 
             sub_indexes, values = ActiveDataLoader(
                 dataset=dataset,
                 batch_size=N,
-                acquisition_function=self.acquisition_function,
+                acquisition_function=acquisition_function,
                 device=self.device,
             ).next()
             values = np.array(values)
@@ -222,7 +225,7 @@ class Retriever:
             futures = []
             for i in range(n):
                 futures.append(executor.submit(engine, i))
-            for future in concurrent.futures.as_completed(futures):
+            for future in futures:
                 values, indices, embeddings = future.result()
                 resulting_values.append(values)
                 resulting_indices.append(indices)
